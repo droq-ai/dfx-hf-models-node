@@ -1,0 +1,40 @@
+services:
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: droq-node-template
+    environment:
+      - NODE_NAME=droq-node-template
+      - NODE_PORT=8000
+      - LOG_LEVEL=INFO
+      - NATS_URL=nats://nats:4222
+      - NATS_CLIENT_NAME=${NODE_NAME:-droq-node-template}
+      - STREAM_NAME=droq-stream
+    volumes:
+      - ./src:/app/src:ro
+    networks:
+      - droq-network
+    restart: unless-stopped
+    ports:
+      - "${NODE_EXTERNAL_PORT:-8000}:${NODE_PORT:-8000}"
+
+  nats:
+    image: nats:latest
+    container_name: droq-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js", "-m", "8222"]
+    networks:
+      - droq-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+networks:
+  droq-network:
+    driver: bridge
+
