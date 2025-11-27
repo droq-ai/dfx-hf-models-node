@@ -1,20 +1,20 @@
 {
   "version": "0.1.0",
-  "node_id": "dfx-base-node-template-py",
-  "name": "Droq Base Node Template",
-  "description": "A Python boilerplate template for creating new DFX nodes.",
+  "node_id": "dfx-hf-models-node",
+  "name": "DFX Hugging Face Models Node",
+  "description": "A node providing local execution of Hugging Face models as DroqFlow components.",
   "author": "Droq Team",
-  "api_url": "http://localhost:8003",
+  "api_url": "http://localhost:8006",
   "created_at": "2025-11-17T18:44:00Z",
   "ip_address": "127.0.0.1",
   "status": "active",
-  "docker_image": "droqai/dfx-base-node-template:latest",
+  "docker_image": "droq-ai/dfx-hf-models-node:latest",
   "deployment_location": "local",
-  "source_code_location": "https://github.com/droq-ai/dfx-base-node-template-py",
+  "source_code_location": "https://github.com/droq-ai/dfx-hf-models-node",
   "components": {
-    "DFXExampleComponent": {
-      "path": "dfx.components.example",
-      "description": "This is a sample droq component",
+    "MiniLMEmbeddingsComponent": {
+      "path": "dfx.components.minilm_embeddings",
+      "description": "Generate embeddings using the locally stored all-MiniLM-L6-V2 SentenceTransformer model.",
       "author": "Droq Team"
     }
   }

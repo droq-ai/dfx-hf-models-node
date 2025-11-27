@@ -2,7 +2,8 @@
 .env
 .env.local
 .env.*.local
-
+models/
+myenv/
 # Python
 __pycache__/
 *.py[cod]

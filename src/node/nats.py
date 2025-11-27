@@ -1,5 +1,7 @@
 """NATS client helper for publishing and consuming messages."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging

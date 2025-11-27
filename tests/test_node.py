@@ -1,48 +1,83 @@
-"""Basic tests for the node template."""
+"""API tests for the DFX HF Models Node."""
+
+from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
-import pytest
+from fastapi.testclient import TestClient
 
-# Add src to path for imports
+# Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from node.main import run_node, shutdown_event
+from node.api import app
+
+client = TestClient(app)
 
 
-def test_imports():
-    """Test that the module can be imported."""
-    from node import main
-
-    assert main is not None
-
-
-@pytest.mark.asyncio
-async def test_run_node(nats_url):
-    """Test that run_node can be called (basic smoke test)."""
-    import os
-
-    # Set NATS URL for the test
-    os.environ["NATS_URL"] = nats_url
-
-    # Clear shutdown event first
-    shutdown_event.clear()
-    # Set shutdown event to exit quickly
-    shutdown_event.set()
-
-    # Should not raise an exception
-    await run_node()
+def test_health_endpoint():
+    response = client.get("/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "healthy"
 
 
-def test_shutdown_event():
-    """Test shutdown event functionality."""
-    # Reset to known state
-    shutdown_event.clear()
-    assert shutdown_event.is_set() is False
+class _FakeVector:
+    def __init__(self, values):
+        self._values = list(values)
 
-    shutdown_event.set()
-    assert shutdown_event.is_set() is True
+    def tolist(self):
+        return list(self._values)
 
-    shutdown_event.clear()
-    assert shutdown_event.is_set() is False
+
+class _FakeSentenceTransformer:
+    def encode(self, texts, convert_to_numpy=True):
+        return [_FakeVector([float(len(text)), 2.0, 3.0]) for text in texts]
+
+
+class _FakePipeline:
+    def __call__(self, inputs, **kwargs):
+        return {"echo": inputs, "params": kwargs}
+
+
+@patch(
+    "node.api._load_component_runner",
+    return_value=("embeddings", "fake-model", "sentence_transformer", _FakeSentenceTransformer()),
+)
+def test_execute_embeddings(mock_loader):
+    response = client.post(
+        "/api/v1/execute",
+        json={"component": "MiniLMEmbeddingsComponent", "inputs": ["hello", "world"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["component"] == "MiniLMEmbeddingsComponent"
+    assert data["model_id"] == "fake-model"
+    assert data["task"] == "embeddings"
+    assert len(data["output"]) == 2
+
+    mock_loader.assert_called_once_with("MiniLMEmbeddingsComponent")
+
+
+@patch(
+    "node.api._load_component_runner",
+    return_value=("text-generation", "fake-model", "pipeline", _FakePipeline()),
+)
+def test_execute_pipeline(mock_loader):
+    payload = {
+        "component": "SomePipelineComponent",
+        "inputs": "hello world",
+        "parameters": {"max_new_tokens": 5},
+    }
+    response = client.post("/api/v1/execute", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["component"] == "SomePipelineComponent"
+    assert data["task"] == "text-generation"
+    assert data["output"]["echo"] == "hello world"
+    assert data["output"]["params"]["max_new_tokens"] == 5
+
+    mock_loader.assert_called_once_with("SomePipelineComponent")
