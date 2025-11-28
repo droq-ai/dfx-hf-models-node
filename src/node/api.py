@@ -313,6 +313,51 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
     # Load the component runner
     task, model_id, runner_kind, runner = _load_component_runner(component_class)
     
+    # Handle pipeline components (e.g., export_embeddings_data)
+    # They process data_inputs directly, not text for embedding
+    if runner_kind == "pipeline":
+        parameters = component_state.parameters or {}
+        input_values = component_state.input_values or {}
+        data_inputs = parameters.get("data_inputs") or input_values.get("data_inputs")
+        
+        if not data_inputs:
+            raise HTTPException(status_code=400, detail="No data_inputs found for pipeline component")
+        
+        start_time = time.perf_counter()
+        try:
+            output = await asyncio.to_thread(runner, data_inputs, **parameters)
+        except Exception as exc:
+            logger.error(f"Pipeline execution failed: {exc}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {exc}") from exc
+        
+        execution_time = time.perf_counter() - start_time
+        result_data = output if isinstance(output, dict) else {"result": output}
+        
+        # Publish to NATS if stream topic provided
+        if stream_topic:
+            try:
+                nats_client = await _get_nats_client()
+                if nats_client:
+                    publish_data = {
+                        "message_id": message_id,
+                        "component_id": component_state.component_id,
+                        "component_class": component_class,
+                        "result": result_data,
+                        "result_type": "Data",
+                        "execution_time": execution_time,
+                    }
+                    await nats_client.publish(stream_topic, publish_data)
+                    logger.info(f"[NATS] Published pipeline result to {stream_topic}")
+            except Exception as e:
+                logger.warning(f"[NATS] Failed to publish pipeline result: {e}")
+        
+        return {
+            "success": True,
+            "result": result_data,
+            "result_type": "Data",
+            "execution_time": execution_time,
+        }
+    
     # Extract text inputs from component state
     # For embeddings, inputs can be in input_values or parameters
     texts = []
@@ -371,28 +416,39 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
     
     execution_time = time.perf_counter() - start_time
     
-    # Format output as Data object for langflow
-    # Data object expects: {"data": {...}, "text_key": "text"}
-    if len(texts) == 1:
-        data_content = {
-            "text": texts[0],
-            "embeddings": output[0] if output else [],
-            "model": component_class,
-        }
+    # Check method_name to determine output format
+    # - get_embeddings_only: return only the embeddings array
+    # - generate_embeddings (default): return full Data object
+    if method_name == "get_embeddings_only":
+        # Return only embeddings array
+        if len(texts) == 1:
+            result_data = output[0] if output else []
+        else:
+            result_data = output
+        result_type = "Embeddings"
     else:
-        data_content = {
-            "texts": texts,
-            "embeddings": output,
-            "model": component_class,
-            "count": len(texts),
+        # Return full Data object with text, embeddings, model
+        if len(texts) == 1:
+            data_content = {
+                "text": texts[0],
+                "embeddings": output[0] if output else [],
+                "model": component_class,
+            }
+        else:
+            data_content = {
+                "texts": texts,
+                "embeddings": output,
+                "model": component_class,
+                "count": len(texts),
+            }
+        
+        # Wrap in Data object structure
+        result_data = {
+            "data": data_content,
+            "text_key": "text" if len(texts) == 1 else None,
+            "default_value": "",
         }
-    
-    # Wrap in Data object structure
-    result_data = {
-        "data": data_content,
-        "text_key": "text" if len(texts) == 1 else None,
-        "default_value": "",
-    }
+        result_type = "Data"
     
     # Serialize result for NATS publishing
     serialized_result = result_data
@@ -400,17 +456,16 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
     # Publish to NATS
     if stream_topic:
         logger.info(f"[NATS] Attempting to publish to topic: {stream_topic} with message_id: {message_id}")
-        print(f"[NATS] Attempting to publish to topic: {stream_topic} with message_id: {message_id}", flush=True)
         try:
             nats_client = await _get_nats_client()
             if nats_client:
-                # Publish result to NATS with message ID from backend (same format as langflow-executor-node)
+                # Publish result to NATS with message ID from backend
                 publish_data = {
-                    "message_id": message_id,  # Use message_id from backend request
+                    "message_id": message_id,
                     "component_id": component_state.component_id,
                     "component_class": component_class,
                     "result": serialized_result,
-                    "result_type": "Data",
+                    "result_type": result_type,
                     "execution_time": execution_time,
                 }
                 logger.info(f"[NATS] Publishing to topic: {stream_topic}, message_id: {message_id}, data keys: {list(publish_data.keys())}")
@@ -450,7 +505,7 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
     return {
         "result": serialized_result,
         "success": True,
-        "result_type": "Data",
+        "result_type": result_type,
         "execution_time": execution_time,
         "message_id": message_id,
         "updated_attributes": None,

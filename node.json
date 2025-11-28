@@ -16,6 +16,11 @@
       "path": "dfx.components.minilm_embeddings",
       "description": "Generate embeddings using the locally stored all-MiniLM-L6-V2 SentenceTransformer model.",
       "author": "Droq Team"
+    },
+    "DFXExportEmbeddingsDataComponent": {
+      "path": "dfx.components.export_embeddings_data",
+      "description": "Merge outputs from multiple embedding components into separate data and embedding streams.",
+      "author": "Droq Team"
     }
   }
 }
