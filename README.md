@@ -1,16 +1,13 @@
-# Droq Node Template
+# DFX Hugging Face Models Node
 
-A Python template for building Droqflow nodes.
+A Droqflow node providing execution of Hugging Face models.
 
 ## Quick Start
 
 ```bash
-git clone git@github.com:droq-ai/dfx-base-node-template-py.git
-cd dfx-base-node-template-py
+git clone git@github.com:droq-ai/dfx-hf-models-node.git
+cd dfx-hf-models-node
 uv sync
-
-# Replace src/node/main.py with your code
-# Add dependencies: uv add your-package
 
 # Configure node.json with your node information
 # Configure environment variables
@@ -22,16 +19,6 @@ PYTHONPATH=src uv run python -m node.main
 docker compose up
 ```
 
-## Next Steps
-
-1. Complete your node development
-2. Configure [node.json](docs/node-configuration.md) with your node metadata
-3. Register your node [TBD]
-
-
-
-
-
 ## Docker
 
 ```bash
@@ -39,10 +26,10 @@ docker compose up
 docker build -t your-node:latest .
 
 # Run
-docker run -p 8000:8000 \
-  -e NODE_NAME=my-node \
+docker run -p 8006:8006 \
+  -e NODE_NAME=dfx-hf-models-node \
   -e NATS_URL=nats://localhost:4222 \
-  your-node:latest
+  droq-ai/dfx-hf-models-node:latest
 ```
 
 ## Development
@@ -53,7 +40,7 @@ PYTHONPATH=src uv run pytest
 
 # Format code
 uv run black src/ tests/
-uv run ruff check src/ tests/
+uv run ruff check --fix src/ tests/
 
 # Add dependencies
 uv add package-name
