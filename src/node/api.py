@@ -8,14 +8,14 @@ and optionally publish their results to Droq's NATS streams.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
 import uuid
-import json
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Dict, Literal, Tuple
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -60,13 +60,13 @@ class ComponentState(BaseModel):
     component_class: str
     component_module: str
     component_code: str | None = None
-    parameters: Dict[str, Any] = Field(default_factory=dict)
-    input_values: Dict[str, Any] | None = None
-    config: Dict[str, Any] | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    input_values: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None
     display_name: str | None = None
     component_id: str | None = None
     stream_topic: str | None = None
-    attributes: Dict[str, Any] | None = None
+    attributes: dict[str, Any] | None = None
 
 
 class ExecutionRequest(BaseModel):
@@ -75,7 +75,7 @@ class ExecutionRequest(BaseModel):
     # DFX format fields
     component: str | None = Field(None, description="Registered component name (DFX format).")
     inputs: Any = Field(None, description="Task-specific inputs (DFX format).")
-    parameters: Dict[str, Any] | None = Field(
+    parameters: dict[str, Any] | None = Field(
         default=None,
         description="Optional parameters (DFX format).",
     )
@@ -83,19 +83,23 @@ class ExecutionRequest(BaseModel):
         default=None,
         description="Optional NATS subject to publish the result to (DFX format).",
     )
-    metadata: Dict[str, Any] | None = Field(
+    metadata: dict[str, Any] | None = Field(
         default=None,
         description="Extra metadata to include when publishing (DFX format).",
     )
-    
+
     # Langflow executor format fields
     component_state: ComponentState | None = Field(
         None, description="Component state (Langflow executor format)."
     )
-    method_name: str | None = Field(None, description="Method name to execute (Langflow executor format).")
+    method_name: str | None = Field(
+        None, description="Method name to execute (Langflow executor format)."
+    )
     is_async: bool = Field(False, description="Whether method is async (Langflow executor format).")
     timeout: int = Field(30, description="Execution timeout (Langflow executor format).")
-    message_id: str | None = Field(None, description="Message ID for tracking (Langflow executor format).")
+    message_id: str | None = Field(
+        None, description="Message ID for tracking (Langflow executor format)."
+    )
 
 
 class ExecutionResponse(BaseModel):
@@ -122,7 +126,7 @@ def _resolve_models_root() -> Path:
 _RunnerKind = Literal["sentence_transformer", "pipeline"]
 
 
-def _load_component_runner(component_name: str) -> Tuple[str, str, _RunnerKind, Any]:
+def _load_component_runner(component_name: str) -> tuple[str, str, _RunnerKind, Any]:
     """Load (or fetch from cache) the runner for a registered component."""
     module_path = COMPONENT_MODULES.get(component_name)
     if not module_path:
@@ -194,13 +198,15 @@ def _normalize_embedding_inputs(inputs: Any) -> list[str]:
         return [inputs]
     if isinstance(inputs, list) and all(isinstance(item, str) for item in inputs):
         return inputs
-    raise HTTPException(status_code=400, detail="Embedding tasks require a string or list of strings as inputs.")
+    raise HTTPException(
+        status_code=400, detail="Embedding tasks require a string or list of strings as inputs."
+    )
 
 
 @app.post("/api/v1/execute")
-async def execute(request: ExecutionRequest) -> Dict[str, Any]:
+async def execute(request: ExecutionRequest) -> dict[str, Any]:
     """Execute a Hugging Face task (embeddings, generation, etc.) locally and optionally publish to NATS.
-    
+
     Supports both DFX format and Langflow executor format.
     """
     # Detect which format we're receiving
@@ -213,11 +219,11 @@ async def execute(request: ExecutionRequest) -> Dict[str, Any]:
     else:
         raise HTTPException(
             status_code=422,
-            detail="Request must include either 'component' (DFX format) or 'component_state' (Langflow executor format)."
+            detail="Request must include either 'component' (DFX format) or 'component_state' (Langflow executor format).",
         )
 
 
-async def _execute_dfx_format(request: ExecutionRequest) -> Dict[str, Any]:
+async def _execute_dfx_format(request: ExecutionRequest) -> dict[str, Any]:
     """Execute using DFX format."""
     task, model_id, runner_kind, runner = _load_component_runner(request.component)
 
@@ -259,15 +265,26 @@ async def _execute_dfx_format(request: ExecutionRequest) -> Dict[str, Any]:
             "parameters": request.parameters or {},
             "metadata": request.metadata or {},
         }
-        logger.info(f"[NATS] [DFX Format] Attempting to publish to subject: {publish_subject} with message_id: {message_id}")
+        logger.info(
+            f"[NATS] [DFX Format] Attempting to publish to subject: {publish_subject} with message_id: {message_id}"
+        )
         logger.info(f"[NATS] [DFX Format] Publish data keys: {list(payload.keys())}")
-        logger.info(f"[NATS] [DFX Format] Component: {request.component}, task: {task}, model_id: {model_id}")
-        logger.info(f"[NATS] [DFX Format] Output type: {type(output).__name__}, output length: {len(output) if isinstance(output, list) else 'N/A'}")
+        logger.info(
+            f"[NATS] [DFX Format] Component: {request.component}, task: {task}, model_id: {model_id}"
+        )
+        logger.info(
+            f"[NATS] [DFX Format] Output type: {type(output).__name__}, output length: {len(output) if isinstance(output, list) else 'N/A'}"
+        )
         # Log full payload (truncated for very large outputs)
         payload_str = json.dumps(payload, indent=2, default=str)
         if len(payload_str) > 2000:
-            logger.info(f"[NATS] [DFX Format] Full publish data (truncated): {payload_str[:2000]}...")
-            print(f"[NATS] [DFX Format] Full publish data (truncated): {payload_str[:2000]}...", flush=True)
+            logger.info(
+                f"[NATS] [DFX Format] Full publish data (truncated): {payload_str[:2000]}..."
+            )
+            print(
+                f"[NATS] [DFX Format] Full publish data (truncated): {payload_str[:2000]}...",
+                flush=True,
+            )
         else:
             logger.info(f"[NATS] [DFX Format] Full publish data: {payload_str}")
             print(f"[NATS] [DFX Format] Full publish data: {payload_str}", flush=True)
@@ -280,13 +297,29 @@ async def _execute_dfx_format(request: ExecutionRequest) -> Dict[str, Any]:
                     message_id,
                     publish_subject,
                 )
-                print(f"[NATS] [DFX Format] ✅ Published execution result (message_id={message_id}) to subject {publish_subject}", flush=True)
+                print(
+                    f"[NATS] [DFX Format] ✅ Published execution result (message_id={message_id}) to subject {publish_subject}",
+                    flush=True,
+                )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("[NATS] [DFX Format] ❌ Failed to publish to NATS subject %s: %s", publish_subject, exc)
-                print(f"[NATS] [DFX Format] ❌ Failed to publish to NATS subject {publish_subject}: {exc}", flush=True)
+                logger.warning(
+                    "[NATS] [DFX Format] ❌ Failed to publish to NATS subject %s: %s",
+                    publish_subject,
+                    exc,
+                )
+                print(
+                    f"[NATS] [DFX Format] ❌ Failed to publish to NATS subject {publish_subject}: {exc}",
+                    flush=True,
+                )
         else:
-            logger.warning("[NATS] [DFX Format] ⚠️  NATS client unavailable; skipping publish to %s", publish_subject)
-            print(f"[NATS] [DFX Format] ⚠️  NATS client unavailable; skipping publish to {publish_subject}", flush=True)
+            logger.warning(
+                "[NATS] [DFX Format] ⚠️  NATS client unavailable; skipping publish to %s",
+                publish_subject,
+            )
+            print(
+                f"[NATS] [DFX Format] ⚠️  NATS client unavailable; skipping publish to {publish_subject}",
+                flush=True,
+            )
     else:
         publish_subject = None
         logger.debug("[NATS] [DFX Format] No publish_subject provided, skipping NATS publish")
@@ -302,37 +335,41 @@ async def _execute_dfx_format(request: ExecutionRequest) -> Dict[str, Any]:
     ).model_dump()
 
 
-async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
+async def _execute_langflow_format(request: ExecutionRequest) -> dict[str, Any]:
     """Execute using Langflow executor format."""
     component_state = request.component_state
     component_class = component_state.component_class
     method_name = request.method_name or "generate_embeddings"
     message_id = request.message_id or str(uuid.uuid4())
     stream_topic = component_state.stream_topic
-    
+
     # Load the component runner
     task, model_id, runner_kind, runner = _load_component_runner(component_class)
-    
+
     # Handle pipeline components (e.g., export_embeddings_data)
     # They process data_inputs directly, not text for embedding
     if runner_kind == "pipeline":
         parameters = component_state.parameters or {}
         input_values = component_state.input_values or {}
         data_inputs = parameters.get("data_inputs") or input_values.get("data_inputs")
-        
+
         if not data_inputs:
-            raise HTTPException(status_code=400, detail="No data_inputs found for pipeline component")
-        
+            raise HTTPException(
+                status_code=400, detail="No data_inputs found for pipeline component"
+            )
+
         start_time = time.perf_counter()
         try:
             output = await asyncio.to_thread(runner, data_inputs, **parameters)
         except Exception as exc:
             logger.error(f"Pipeline execution failed: {exc}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {exc}") from exc
-        
+            raise HTTPException(
+                status_code=500, detail=f"Pipeline execution failed: {exc}"
+            ) from exc
+
         execution_time = time.perf_counter() - start_time
         result_data = output if isinstance(output, dict) else {"result": output}
-        
+
         # Publish to NATS if stream topic provided
         if stream_topic:
             try:
@@ -350,14 +387,14 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
                     logger.info(f"[NATS] Published pipeline result to {stream_topic}")
             except Exception as e:
                 logger.warning(f"[NATS] Failed to publish pipeline result: {e}")
-        
+
         return {
             "success": True,
             "result": result_data,
             "result_type": "Data",
             "execution_time": execution_time,
         }
-    
+
     # Extract text inputs from component state
     # For embeddings, inputs can be in input_values or parameters
     texts = []
@@ -373,24 +410,32 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
                 # Try to extract text from common keys
                 if "text" in input_data:
                     text_val = input_data["text"]
-                    texts = [text_val] if isinstance(text_val, str) else text_val if isinstance(text_val, list) else [str(text_val)]
+                    texts = (
+                        [text_val]
+                        if isinstance(text_val, str)
+                        else text_val if isinstance(text_val, list) else [str(text_val)]
+                    )
                 elif "data" in input_data:
                     data_val = input_data["data"]
                     if isinstance(data_val, dict) and "text" in data_val:
-                        texts = [data_val["text"]] if isinstance(data_val["text"], str) else data_val["text"]
+                        texts = (
+                            [data_val["text"]]
+                            if isinstance(data_val["text"], str)
+                            else data_val["text"]
+                        )
                     else:
                         texts = [str(data_val)]
                 else:
                     texts = [str(input_data)]
             else:
                 texts = [str(input_data)]
-    
+
     if not texts:
         raise HTTPException(status_code=400, detail="No text inputs found in component state")
-    
+
     # Normalize texts
     texts = _normalize_embedding_inputs(texts)
-    
+
     # Execute embeddings
     start_time = time.perf_counter()
     if runner_kind == "sentence_transformer":
@@ -413,9 +458,9 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
             msg = f"Pipeline execution failed: {exc}"
             logger.error(msg, exc_info=True)
             raise HTTPException(status_code=500, detail=msg) from exc
-    
+
     execution_time = time.perf_counter() - start_time
-    
+
     # Check method_name to determine output format
     # - get_embeddings_only: return only the embeddings array
     # - generate_embeddings (default): return full Data object
@@ -441,7 +486,7 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
                 "model": component_class,
                 "count": len(texts),
             }
-        
+
         # Wrap in Data object structure
         result_data = {
             "data": data_content,
@@ -449,13 +494,15 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
             "default_value": "",
         }
         result_type = "Data"
-    
+
     # Serialize result for NATS publishing
     serialized_result = result_data
-    
+
     # Publish to NATS
     if stream_topic:
-        logger.info(f"[NATS] Attempting to publish to topic: {stream_topic} with message_id: {message_id}")
+        logger.info(
+            f"[NATS] Attempting to publish to topic: {stream_topic} with message_id: {message_id}"
+        )
         try:
             nats_client = await _get_nats_client()
             if nats_client:
@@ -468,22 +515,41 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
                     "result_type": result_type,
                     "execution_time": execution_time,
                 }
-                logger.info(f"[NATS] Publishing to topic: {stream_topic}, message_id: {message_id}, data keys: {list(publish_data.keys())}")
-                logger.info(f"[NATS] Publish data preview: component_class={component_class}, result_type={publish_data['result_type']}, execution_time={execution_time:.3f}s")
-                logger.info(f"[NATS] Result data keys: {list(serialized_result.keys()) if isinstance(serialized_result, dict) else 'N/A'}")
+                logger.info(
+                    f"[NATS] Publishing to topic: {stream_topic}, message_id: {message_id}, data keys: {list(publish_data.keys())}"
+                )
+                logger.info(
+                    f"[NATS] Publish data preview: component_class={component_class}, result_type={publish_data['result_type']}, execution_time={execution_time:.3f}s"
+                )
+                logger.info(
+                    f"[NATS] Result data keys: {list(serialized_result.keys()) if isinstance(serialized_result, dict) else 'N/A'}"
+                )
                 # Log full publish data (truncated for very large results)
                 publish_data_str = json.dumps(publish_data, indent=2, default=str)
                 if len(publish_data_str) > 2000:
-                    logger.info(f"[NATS] Full publish data (truncated): {publish_data_str[:2000]}...")
-                    print(f"[NATS] Full publish data (truncated): {publish_data_str[:2000]}...", flush=True)
+                    logger.info(
+                        f"[NATS] Full publish data (truncated): {publish_data_str[:2000]}..."
+                    )
+                    print(
+                        f"[NATS] Full publish data (truncated): {publish_data_str[:2000]}...",
+                        flush=True,
+                    )
                 else:
                     logger.info(f"[NATS] Full publish data: {publish_data_str}")
                     print(f"[NATS] Full publish data: {publish_data_str}", flush=True)
-                print(f"[NATS] Publishing to topic: {stream_topic}, message_id: {message_id}, data keys: {list(publish_data.keys())}", flush=True)
+                print(
+                    f"[NATS] Publishing to topic: {stream_topic}, message_id: {message_id}, data keys: {list(publish_data.keys())}",
+                    flush=True,
+                )
                 # Use the topic directly (already in format: droq.local.public.userid.workflowid.component.out)
                 await nats_client.publish(stream_topic, publish_data)
-                logger.info(f"[NATS] ✅ Successfully published result to NATS topic: {stream_topic} with message_id: {message_id}")
-                print(f"[NATS] ✅ Successfully published result to NATS topic: {stream_topic} with message_id: {message_id}", flush=True)
+                logger.info(
+                    f"[NATS] ✅ Successfully published result to NATS topic: {stream_topic} with message_id: {message_id}"
+                )
+                print(
+                    f"[NATS] ✅ Successfully published result to NATS topic: {stream_topic} with message_id: {message_id}",
+                    flush=True,
+                )
             else:
                 error_msg = f"[NATS] ❌ NATS client unavailable; cannot publish to required topic: {stream_topic}"
                 logger.error(error_msg)
@@ -498,9 +564,14 @@ async def _execute_langflow_format(request: ExecutionRequest) -> Dict[str, Any]:
             print(f"[NATS] ❌ {error_msg}", flush=True)
             raise HTTPException(status_code=500, detail=error_msg) from exc
     else:
-        logger.warning(f"[NATS] ⚠️  No stream_topic provided in request, skipping NATS publish. Component: {component_class}")
-        print(f"[NATS] ⚠️  No stream_topic provided in request, skipping NATS publish. Component: {component_class}", flush=True)
-    
+        logger.warning(
+            f"[NATS] ⚠️  No stream_topic provided in request, skipping NATS publish. Component: {component_class}"
+        )
+        print(
+            f"[NATS] ⚠️  No stream_topic provided in request, skipping NATS publish. Component: {component_class}",
+            flush=True,
+        )
+
     # Return langflow executor format response
     return {
         "result": serialized_result,
@@ -530,4 +601,3 @@ async def root() -> dict[str, Any]:
             "health": "/health",
         },
     }
-

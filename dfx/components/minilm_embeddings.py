@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import List, Tuple
 
 from lfx.base.embeddings.model import LCEmbeddingsModel
 from lfx.field_typing import Embeddings
@@ -33,14 +32,14 @@ class MiniLMEmbeddingsComponent(Embeddings):
         self.model = SentenceTransformer(str(model_path))
         self.model_path = model_path
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of documents."""
         if not texts:
             return []
         embeddings = self.model.encode(texts, convert_to_numpy=True)
         return [embedding.tolist() for embedding in embeddings]
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         """Generate embedding for a single query text."""
         if not text:
             return []
@@ -52,7 +51,9 @@ class MiniLMEmbeddingsComponent(LCEmbeddingsModel):
     """DroqFlow component for all-MiniLM-L6-V2 embeddings using local model."""
 
     display_name = "MiniLM Embeddings"
-    description = "Generate embeddings using the locally stored all-MiniLM-L6-V2 SentenceTransformer model."
+    description = (
+        "Generate embeddings using the locally stored all-MiniLM-L6-V2 SentenceTransformer model."
+    )
     documentation: str = "https://www.sbert.net/docs/pretrained_models.html"
     icon = "binary"
     name = "MiniLMEmbeddingsComponent"
@@ -99,7 +100,7 @@ def ensure_model() -> Path:
     return target_dir.resolve()
 
 
-def get_component_runner() -> Tuple[str, str, str, MiniLMEmbeddingsComponent]:
+def get_component_runner() -> tuple[str, str, str, MiniLMEmbeddingsComponent]:
     """
     Return task, model identifier, runner kind, and runner instance for this component.
     """

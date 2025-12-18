@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
-from typing import Iterable, List, Tuple
 import subprocess
+from collections.abc import Iterable
+from pathlib import Path
 
 try:
     from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
@@ -56,7 +56,7 @@ def load_model(model_path: Path = MODEL_PATH) -> SentenceTransformer:
     return SentenceTransformer(str(model_path))
 
 
-def run(texts: Iterable[str]) -> List[List[float]]:
+def run(texts: Iterable[str]) -> list[list[float]]:
     """Generate embeddings for the provided texts."""
     texts_list = [text for text in texts if text.strip()]
     if not texts_list:
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     main()
 
 
-def get_component_runner() -> Tuple[str, str, str, SentenceTransformer]:
+def get_component_runner() -> tuple[str, str, str, SentenceTransformer]:
     """
     Return metadata + runner for this component.
 
@@ -103,4 +103,3 @@ def get_component_runner() -> Tuple[str, str, str, SentenceTransformer]:
     """
     model = load_model()
     return ("embeddings", HF_MODEL_ID, "sentence_transformer", model)
-
