@@ -14,11 +14,13 @@ RUN uv pip compile pyproject.toml -o requirements.txt && \
     uv pip install --system -r requirements.txt && \
     uv pip install --system .
 
-# Copy node configuration, models, and startup script
+# Copy node configuration and startup script
 COPY node.json ./
-COPY models/ ./models/
 COPY scripts/ ./scripts/
 COPY start-local.sh ./
+
+# Create models directory (models are downloaded at runtime if not present)
+RUN mkdir -p ./models
 
 # Create non-root user and make script executable
 RUN useradd -m -u 1000 nodeuser && \
