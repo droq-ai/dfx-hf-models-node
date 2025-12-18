@@ -15,7 +15,7 @@ fi
 MODEL_NAME="$1"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODELS_DIR="${ROOT_DIR}/models"
 mkdir -p "$MODELS_DIR"
 
