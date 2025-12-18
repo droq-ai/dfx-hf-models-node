@@ -16,13 +16,14 @@ Output format:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+from collections.abc import Iterable
+from typing import Any
 
 
 class ExportEmbeddingsDataRunner:
     """Callable runner that merges raw data and embeddings from multiple inputs."""
 
-    def __call__(self, inputs: Any, **parameters: Any) -> Dict[str, Any]:
+    def __call__(self, inputs: Any, **parameters: Any) -> dict[str, Any]:
         data_inputs = self._extract_data_inputs(inputs, parameters)
         payloads = list(self._iter_payloads(data_inputs))
 
@@ -35,7 +36,7 @@ class ExportEmbeddingsDataRunner:
         }
 
     @staticmethod
-    def _extract_data_inputs(inputs: Any, parameters: Dict[str, Any]) -> List[Any]:
+    def _extract_data_inputs(inputs: Any, parameters: dict[str, Any]) -> list[Any]:
         """Prefer explicit data_inputs in parameters; fall back to request inputs."""
         if "data_inputs" in parameters and parameters["data_inputs"]:
             candidates = parameters["data_inputs"]
@@ -51,7 +52,7 @@ class ExportEmbeddingsDataRunner:
     @staticmethod
     def _iter_payloads(data_inputs: Iterable[Any]) -> Iterable[dict]:
         """Yield normalized payloads from input data.
-        
+
         Handles various input structures including:
         - PrecomputedEmbeddings: {"type": "PrecomputedEmbeddings", "vectors": [...], "texts": [...]}
         - Data objects: {"data": {...}}
@@ -77,10 +78,10 @@ class ExportEmbeddingsDataRunner:
                 yield {"value": item}
 
     @staticmethod
-    def _collect_raw_items(payloads: List[dict]) -> List[Any]:
+    def _collect_raw_items(payloads: list[dict]) -> list[Any]:
         """Collect raw data items (text + metadata) from payloads."""
-        merged: List[Any] = []
-        
+        merged: list[Any] = []
+
         for payload in payloads:
             # Handle PrecomputedEmbeddings format
             if payload.get("type") == "PrecomputedEmbeddings":
@@ -92,21 +93,23 @@ class ExportEmbeddingsDataRunner:
                         item["embeddings"] = vectors[i]
                     merged.append(item)
                 continue
-            
+
             # Collect from explicit "items" array
             if isinstance(payload.get("items"), list):
                 merged.extend(payload["items"])
                 continue
-            
+
             # Collect single text entry
             if payload.get("text"):
-                merged.append({
-                    "text": payload.get("text"),
-                    "model": payload.get("model"),
-                    "embeddings": payload.get("embeddings"),
-                })
+                merged.append(
+                    {
+                        "text": payload.get("text"),
+                        "model": payload.get("model"),
+                        "embeddings": payload.get("embeddings"),
+                    }
+                )
                 continue
-            
+
             # Collect multiple texts
             if payload.get("texts") and isinstance(payload["texts"], list):
                 texts = payload["texts"]
@@ -120,27 +123,25 @@ class ExportEmbeddingsDataRunner:
                 continue
 
             # Check nested structure (legacy format)
-            nested_data = (
-                payload.get("locals", {})
-                .get("output", {})
-                .get("data", {})
-            )
+            nested_data = payload.get("locals", {}).get("output", {}).get("data", {})
             if isinstance(nested_data, dict):
                 if isinstance(nested_data.get("items"), list):
                     merged.extend(nested_data["items"])
                 elif nested_data.get("text"):
-                    merged.append({
-                        "text": nested_data.get("text"),
-                        "model": nested_data.get("model"),
-                        "embeddings": nested_data.get("embeddings"),
-                    })
-        
+                    merged.append(
+                        {
+                            "text": nested_data.get("text"),
+                            "model": nested_data.get("model"),
+                            "embeddings": nested_data.get("embeddings"),
+                        }
+                    )
+
         return merged
 
     @staticmethod
-    def _collect_embeddings(payloads: List[dict]) -> List[dict]:
+    def _collect_embeddings(payloads: list[dict]) -> list[dict]:
         """Collect embeddings in vector-store compatible format.
-        
+
         Returns list of entries with:
         - id: Deterministic hash of text content
         - vector: Embedding array (for vector DBs)
@@ -149,10 +150,12 @@ class ExportEmbeddingsDataRunner:
         - metadata: Same as payload (for other DBs)
         """
         import hashlib
-        
-        merged: List[dict[str, Any]] = []
 
-        def to_entry(text: str, vector: List[float], extra_metadata: dict | None = None) -> dict[str, Any]:
+        merged: list[dict[str, Any]] = []
+
+        def to_entry(
+            text: str, vector: list[float], extra_metadata: dict | None = None
+        ) -> dict[str, Any]:
             """Create a vector-store compatible entry."""
             # Normalize text
             if isinstance(text, dict):
@@ -160,24 +163,27 @@ class ExportEmbeddingsDataRunner:
             elif isinstance(text, list):
                 # Join list items
                 text = " | ".join(
-                    item.get("title", item.get("text", str(item))) 
-                    if isinstance(item, dict) else str(item)
+                    (
+                        item.get("title", item.get("text", str(item)))
+                        if isinstance(item, dict)
+                        else str(item)
+                    )
                     for item in text
                 )
             else:
                 text = str(text) if text else ""
-            
+
             # Generate deterministic ID from text content
             text_hash = hashlib.md5(text.encode()).hexdigest()[:16]
             entry_id = f"emb-{text_hash}"
-            
+
             # Build metadata
             metadata = {"text": text}
             if extra_metadata:
                 for key, value in extra_metadata.items():
                     if key not in {"embeddings", "vector", "vectors", "type", "texts"}:
                         metadata[key] = value
-            
+
             return {
                 "id": entry_id,
                 "vector": vector,  # Standard field name for vector DBs
@@ -192,7 +198,7 @@ class ExportEmbeddingsDataRunner:
             if payload.get("type") == "PrecomputedEmbeddings":
                 vectors = payload.get("vectors", [])
                 texts = payload.get("texts", [])
-                
+
                 for i, vector in enumerate(vectors):
                     if not isinstance(vector, list):
                         continue
@@ -200,24 +206,24 @@ class ExportEmbeddingsDataRunner:
                     entry = to_entry(text, vector, {"model": payload.get("model")})
                     merged.append(entry)
                 continue
-            
+
             # Get embeddings - check both "embeddings" and "vectors" keys
             embeddings = payload.get("embeddings") or payload.get("vectors")
-            
+
             if not embeddings or not isinstance(embeddings, list):
                 continue
-            
+
             # Check if it's a single vector (list of floats) or multiple vectors (list of lists)
-            if embeddings and isinstance(embeddings[0], (int, float)):
+            if embeddings and isinstance(embeddings[0], int | float):
                 # Single vector - pair with single text
                 text = payload.get("text", "")
                 entry = to_entry(text, embeddings, payload)
                 merged.append(entry)
-            
+
             elif embeddings and isinstance(embeddings[0], list):
                 # Multiple vectors - pair with texts array
                 texts = payload.get("texts", [])
-                
+
                 for i, vector in enumerate(embeddings):
                     if not isinstance(vector, list):
                         continue
@@ -227,15 +233,11 @@ class ExportEmbeddingsDataRunner:
                     merged.append(entry)
 
             # Also check nested structure (legacy format)
-            nested_data = (
-                payload.get("locals", {})
-                .get("output", {})
-                .get("data", {})
-            )
+            nested_data = payload.get("locals", {}).get("output", {}).get("data", {})
             if isinstance(nested_data, dict):
                 nested_embeddings = nested_data.get("embeddings")
                 if isinstance(nested_embeddings, list) and nested_embeddings:
-                    if isinstance(nested_embeddings[0], (int, float)):
+                    if isinstance(nested_embeddings[0], int | float):
                         text = nested_data.get("text", "")
                         entry = to_entry(text, nested_embeddings, nested_data)
                         merged.append(entry)

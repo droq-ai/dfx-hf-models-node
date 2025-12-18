@@ -28,9 +28,8 @@ jobs:
           # Create virtual environment
           uv venv
           source .venv/bin/activate
-          # Install dependencies without editable package (workaround for hatchling issue)
-          uv pip install nats-py aiohttp
-          uv pip install pytest pytest-asyncio black ruff mypy
+          # Install all project dependencies
+          uv pip install -e ".[dev]"
           # Set PYTHONPATH for imports
           echo "PYTHONPATH=src" >> $GITHUB_ENV
           echo "VIRTUAL_ENV=$PWD/.venv" >> $GITHUB_ENV
