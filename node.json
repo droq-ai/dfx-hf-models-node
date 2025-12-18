@@ -21,6 +21,11 @@
       "path": "dfx.components.export_embeddings_data",
       "description": "Merge outputs from multiple embedding components into separate data and embedding streams.",
       "author": "Droq Team"
+    },
+    "LLMLinguaComponent": {
+      "path": "dfx.components.llmlingua",
+      "description": "Compress text using LLMLingua-2 to reduce token count while preserving content quality.",
+      "author": "Droq Team"
     }
   }
 }
