@@ -209,6 +209,17 @@ async def execute(request: ExecutionRequest) -> dict[str, Any]:
 
     Supports both DFX format and Langflow executor format.
     """
+    # DEBUG: Log incoming request
+    print(f"[DEBUG EXECUTOR RECEIVE] =========================================", flush=True)
+    print(f"[DEBUG EXECUTOR RECEIVE] Received /api/v1/execute request", flush=True)
+    print(f"[DEBUG EXECUTOR RECEIVE] Has component_state: {request.component_state is not None}", flush=True)
+    print(f"[DEBUG EXECUTOR RECEIVE] Has component: {request.component is not None}", flush=True)
+    if request.component_state:
+        print(f"[DEBUG EXECUTOR RECEIVE] component_class: {request.component_state.component_class if hasattr(request.component_state, 'component_class') else 'N/A'}", flush=True)
+        print(f"[DEBUG EXECUTOR RECEIVE] message_id: {request.message_id}", flush=True)
+        print(f"[DEBUG EXECUTOR RECEIVE] stream_topic: {request.component_state.stream_topic if hasattr(request.component_state, 'stream_topic') else 'N/A'}", flush=True)
+    print(f"[DEBUG EXECUTOR RECEIVE] =========================================", flush=True)
+    
     # Detect which format we're receiving
     if request.component_state is not None:
         # Langflow executor format
@@ -342,6 +353,8 @@ async def _execute_langflow_format(request: ExecutionRequest) -> dict[str, Any]:
     method_name = request.method_name or "generate_embeddings"
     message_id = request.message_id or str(uuid.uuid4())
     stream_topic = component_state.stream_topic
+    
+    logger.info(f"[LANGFLOW] Executing {component_class}, stream_topic={stream_topic}, message_id={message_id}")
 
     # Load the component runner
     task, model_id, runner_kind, runner = _load_component_runner(component_class)
@@ -371,9 +384,11 @@ async def _execute_langflow_format(request: ExecutionRequest) -> dict[str, Any]:
         result_data = output if isinstance(output, dict) else {"result": output}
 
         # Publish to NATS if stream topic provided
+        logger.info(f"[PIPELINE] stream_topic={stream_topic}, will publish={bool(stream_topic)}")
         if stream_topic:
             try:
                 nats_client = await _get_nats_client()
+                logger.info(f"[PIPELINE] NATS client available: {nats_client is not None}")
                 if nats_client:
                     publish_data = {
                         "message_id": message_id,
@@ -383,10 +398,25 @@ async def _execute_langflow_format(request: ExecutionRequest) -> dict[str, Any]:
                         "result_type": "Data",
                         "execution_time": execution_time,
                     }
+                    # DEBUG: Print full message details before publishing
+                    print(f"[DEBUG NATS PUBLISH] =========================================", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Topic: {stream_topic}", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Message ID: {message_id}", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Component ID: {component_state.component_id}", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Component Class: {component_class}", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Result Type: Data", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Execution Time: {execution_time}", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Result Data Keys: {list(result_data.keys()) if isinstance(result_data, dict) else type(result_data)}", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] Full Publish Data: {json.dumps(publish_data, default=str, indent=2)}", flush=True)
+                    print(f"[DEBUG NATS PUBLISH] =========================================", flush=True)
+                    logger.info(f"[NATS] publish_data: {publish_data}")
                     await nats_client.publish(stream_topic, publish_data)
-                    logger.info(f"[NATS] Published pipeline result to {stream_topic}")
+                    logger.info(f"[NATS] ✅ Published pipeline result to {stream_topic}")
+                    print(f"[NATS] ✅ Published pipeline result to {stream_topic} with message_id={message_id}", flush=True)
             except Exception as e:
                 logger.warning(f"[NATS] Failed to publish pipeline result: {e}")
+        else:
+            logger.info(f"[PIPELINE] No stream_topic, returning HTTP result only")
 
         return {
             "success": True,
