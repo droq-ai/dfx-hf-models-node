@@ -104,8 +104,8 @@ def _compress_text(text: str, rate: float = 0.9) -> dict[str, Any]:
         "data": {
             "text": compressed_text,  # The compressed text (main output)
             "original_chars": original_chars,  # Stats for status display
-            "compressed_chars": compressed_chars,
-            "reduction_percent": round(reduction, 1),
+        "compressed_chars": compressed_chars,
+        "reduction_percent": round(reduction, 1),
         },
         "text_key": "text",  # Also include text_key for Data compatibility
     }
