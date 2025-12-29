@@ -33,7 +33,7 @@ class NATSClient:
             stream_name: JetStream name (defaults to STREAM_NAME env var)
         """
         self.nats_url = nats_url or os.getenv("NATS_URL", "nats://localhost:4222")
-        self.stream_name = stream_name or os.getenv("STREAM_NAME", "droq-stream")
+        self.stream_name = stream_name or os.getenv("STREAM_NAME", "droq")
         self.nc: NATS | None = None
         self.js: JetStreamContext | None = None
 
@@ -89,19 +89,19 @@ class NATSClient:
             raise RuntimeError("Not connected to NATS. Call connect() first.")
 
         try:
-            # Full subject with stream prefix
-            full_subject = f"{self.stream_name}.{subject}"
-
+            # Publish directly to subject (without stream prefix) to match consumer expectations
+            # The stream_topic from component_state is already in format: droq.local.public.xxx
+            # The stream configuration accepts both droq-stream.> and droq.local.public.> patterns
             # Encode data as JSON
             payload = json.dumps(data).encode()
 
             # Publish with headers if provided
             if headers:
-                await self.js.publish(full_subject, payload, headers=headers)
+                await self.js.publish(subject, payload, headers=headers)
             else:
-                await self.js.publish(full_subject, payload)
+                await self.js.publish(subject, payload)
 
-            logger.debug(f"Published message to {full_subject}")
+            logger.debug(f"Published message to {subject}")
         except Exception as e:
             logger.error(f"Failed to publish message: {e}")
             raise
